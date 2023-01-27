@@ -1,2 +1,2 @@
 # ebl
-proto for ebl confomence
+proto for ebl conference
