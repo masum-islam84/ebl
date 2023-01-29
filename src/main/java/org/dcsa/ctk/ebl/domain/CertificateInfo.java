@@ -5,5 +5,6 @@ import lombok.Data;
 @Data
 public class CertificateInfo {
     private String subjectDN;
-    public long days;
+    private long days;
+    private String crlUri;
 }

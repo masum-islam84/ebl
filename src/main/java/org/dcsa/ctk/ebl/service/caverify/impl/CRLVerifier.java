@@ -30,6 +30,9 @@ import java.util.List;
 @Service
 public class CRLVerifier implements RevocationVerifier {
     private CRLCache cache;
+
+    private final static String NO_CLR ="Certificate doesn't have CRL Distribution points";
+
     private static final Log log = LogFactory.getLog(CRLVerifier.class);
     public CRLVerifier(CRLCache cache) {
         this.cache = cache;
@@ -46,23 +49,23 @@ public class CRLVerifier implements RevocationVerifier {
 
     public RevocationStatus checkRevocationStatus(X509Certificate peerCert, X509Certificate issuerCert) {
 
-        List<String> list = null;
-        try {
-            list = getCrlDistributionPoints(peerCert);
-        } catch (CertificateVerificationException e) {
-            throw new RuntimeException(e.getMessage());
+        List<String> list = getCrlDistributionPoints(peerCert);
+        if(list.contains(NO_CLR)){
+            return RevocationStatus.NO_DISTRIBUTION;
         }
-        //check with distributions points in the list one by one. if one fails go to the other.
         RevocationStatus status = RevocationStatus.UNKNOWN;
         for (String crlUrl : list) {
             log.info("Trying to get CRL for URL: " + crlUrl);
-
             if (cache != null) {
-                X509CRL x509CRL = cache.getCacheValue(crlUrl);
+                X509CRL x509CRL;
+                try {
+                    x509CRL = downloadCRLFromWeb(crlUrl);
+                } catch (IOException | CertificateVerificationException e) {
+                    throw new RuntimeException(e);
+                }
                 if (x509CRL != null) {
                     //If cant be casted, we have used the wrong cache.
                     status = getRevocationStatus(x509CRL, peerCert);
-                    log.info("CRL taken from cache....");
                     return status;
                 }
             }
@@ -82,7 +85,6 @@ public class CRLVerifier implements RevocationVerifier {
             }*/
         }
         return status;
-        //throw new CertificateVerificationException("Cannot check revocation status with the certificate");
     }
 
     private RevocationStatus getRevocationStatus(X509CRL x509CRL, X509Certificate peerCert) {
@@ -123,18 +125,18 @@ public class CRLVerifier implements RevocationVerifier {
      * extension in a X.509 certificate. If CRL distribution point extension is
      * unavailable, returns an empty list.
      */
-    private List<String> getCrlDistributionPoints(X509Certificate cert)
-            throws CertificateVerificationException {
+    public List<String> getCrlDistributionPoints(X509Certificate cert){
 
         //Gets the DER-encoded OCTET string for the extension value for CRLDistributionPoints
         byte[] crlDPExtensionValue = cert.getExtensionValue(Extension.cRLDistributionPoints.getId());
-        if (crlDPExtensionValue == null)
-            throw new CertificateVerificationException("Certificate doesn't have CRL Distribution points");
+        if (crlDPExtensionValue == null){
+           return List.of(NO_CLR);
+        }
         //crlDPExtensionValue is encoded in ASN.1 format.
         ASN1InputStream asn1In = new ASN1InputStream(crlDPExtensionValue);
         //DER (Distinguished Encoding Rules) is one of ASN.1 encoding rules defined in ITU-T X.690, 2002, specification.
         //ASN.1 encoding rules can be used to encode any data object into a binary file. Read the object in octets.
-        CRLDistPoint distPoint;
+        CRLDistPoint distPoint = null;
         try {
             DEROctetString crlDEROctetString = (DEROctetString) asn1In.readObject();
             //Get Input stream in octets
@@ -142,7 +144,7 @@ public class CRLVerifier implements RevocationVerifier {
             ASN1Primitive crlDERObject = asn1InOctets.readObject();
             distPoint = CRLDistPoint.getInstance(crlDERObject);
         } catch (IOException e) {
-            throw new CertificateVerificationException("Cannot read certificate to get CRL urls", e);
+            return List.of(NO_CLR);
         }
 
         List<String> crlUrls = new ArrayList<>();
@@ -166,8 +168,9 @@ public class CRLVerifier implements RevocationVerifier {
             }
         }
 
-        if (crlUrls.isEmpty())
-            throw new CertificateVerificationException("Cant get CRL urls from certificate");
+        if (crlUrls.isEmpty()) {
+           return List.of(NO_CLR);
+        }
         return crlUrls;
     }
 }

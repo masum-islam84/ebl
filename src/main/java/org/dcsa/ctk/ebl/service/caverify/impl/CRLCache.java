@@ -22,6 +22,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.dcsa.ctk.ebl.service.caverify.ManageableCache;
 import org.dcsa.ctk.ebl.service.caverify.ManageableCacheValue;
+import org.springframework.stereotype.Service;
 
 import java.security.cert.X509CRL;
 import java.util.Date;
@@ -29,10 +30,11 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Service
 public class CRLCache implements ManageableCache {
 
     private static volatile CRLCache cache;
-    private static volatile Map<String, CRLCacheValue> hashMap = new ConcurrentHashMap<String, CRLCacheValue>();
+    private static volatile Map<String, CRLCacheValue> hashMap = new ConcurrentHashMap<>();
     private static volatile Iterator<Map.Entry<String, CRLCacheValue>> iterator = hashMap.entrySet().iterator();
     private static volatile CacheManager cacheManager;
     private static CRLVerifier crlVerifier = new CRLVerifier(null);
@@ -73,9 +75,9 @@ public class CRLCache implements ManageableCache {
 
     private synchronized void replaceNewCacheValue(CRLCacheValue cacheValue) {
         //If someone has updated with the new value before current Thread.
-        if (cacheValue.isValid())
+        if (cacheValue.isValid()) {
             return;
-
+        }
         try {
             String crlUrl = cacheValue.crlUrl;
             X509CRL x509CRL = crlVerifier.downloadCRLFromWeb(crlUrl);

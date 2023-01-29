@@ -44,7 +44,7 @@ public class CertificateUtil {
         try {
             contentSigner = new JcaContentSignerBuilder(signatureAlgorithm).build(certificateManager.getKeyPair().getPrivate());
             certificateManager.setX509Certificate(new JcaX509CertificateConverter().setProvider(bcProvider).getCertificate(certificateManager.getCertBuilder().build(contentSigner)));
-            return  certificateManager.getX509Certificate();
+            return certificateManager.getX509Certificate();
         }catch (CertificateException  |  OperatorCreationException e) {
             throw new RuntimeException(e.getMessage());
         }

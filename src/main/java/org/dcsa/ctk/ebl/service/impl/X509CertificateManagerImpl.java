@@ -1,5 +1,6 @@
 package org.dcsa.ctk.ebl.service.impl;
 
+import lombok.Data;
 import lombok.extern.java.Log;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.DERIA5String;
@@ -16,6 +17,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class X509CertificateManagerImpl implements X509CertificateManager {
     private CertificateManager certificateManager;
+
+    public CertificateManager getCertificateManager() {
+        return certificateManager;
+    }
+
 
     public X509CertificateManagerImpl(){
         certificateManager = new CertificateManager();
@@ -40,8 +46,8 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
         try {
             certificateManager.getCertBuilder().addExtension(Extension.cRLDistributionPoints, true, crlDistPoint);
             CertificateUtil.getSelfSignCertificate(certificateManager);
-        } catch (CertIOException e) {
-            throw new RuntimeException(e.getMessage());
+        } catch (Exception e) {
+            return "CRL Distribution Point already exist: "+e.getMessage();
         }
         return crlUri+" is added to the distributionList of x509Certificate";
     }
@@ -50,7 +56,7 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
         if(!isCertificateManagerValid()){
             return "certificate is not created yet. Pls make a certificate first";
         }
-        certificateManager.getCertBuilder().removeExtension(new ASN1ObjectIdentifier("2.5.29.19"));
+        certificateManager.getCertBuilder().removeExtension(Extension.cRLDistributionPoints);
         CertificateUtil.getSelfSignCertificate(certificateManager);
 
 /*        GeneralName generalName = new GeneralName(GeneralName.uniformResourceIdentifier, new DERIA5String(crlUri));
