@@ -1,8 +1,6 @@
 package org.dcsa.ctk.ebl.service.caverify;
 
 
-import org.dcsa.ctk.ebl.service.caverify.exception.CertificateVerificationException;
-
 import java.security.cert.X509Certificate;
 import java.util.List;
 

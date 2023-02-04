@@ -10,7 +10,7 @@ import org.bouncycastle.asn1.x509.Extension;
 import org.bouncycastle.asn1.x509.*;
 import org.dcsa.ctk.ebl.service.caverify.RevocationStatus;
 import org.dcsa.ctk.ebl.service.caverify.RevocationVerifier;
-import org.dcsa.ctk.ebl.service.caverify.exception.CertificateVerificationException;
+import org.dcsa.ctk.ebl.service.exception.CertificateVerificationException;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;

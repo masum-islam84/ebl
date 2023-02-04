@@ -1,4 +1,4 @@
-package org.dcsa.ctk.ebl.service.caverify.exception;
+package org.dcsa.ctk.ebl.service.exception;
 
 public class CertificateVerificationException extends Exception {
 
