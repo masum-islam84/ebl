@@ -1,32 +1,40 @@
 package org.dcsa.ctk.ebl.util;
 
 import lombok.extern.java.Log;
-import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
 import org.bouncycastle.asn1.x500.style.BCStyle;
 import org.bouncycastle.asn1.x500.style.RFC4519Style;
-import org.bouncycastle.asn1.x509.BasicConstraints;
-import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.X509v3CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.dcsa.ctk.ebl.domain.CertificateInfo;
 import org.dcsa.ctk.ebl.domain.CertificateManager;
+import org.dcsa.ctk.ebl.service.X509CertificateManager;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
+import javax.security.auth.x500.X500Principal;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.StringWriter;
 import java.math.BigInteger;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.*;
-import java.security.cert.CertificateException;
-import java.security.cert.CertificateExpiredException;
-import java.security.cert.CertificateNotYetValidException;
-import java.security.cert.X509Certificate;
+import java.security.cert.Certificate;
+import java.security.cert.*;
 import java.time.LocalDateTime;
 import java.util.Calendar;
 import java.util.Date;
@@ -44,7 +52,66 @@ public class CertificateUtil {
         }
         return keypair;
     }
+    static public X509Certificate makeCertificateFromMultipartFile(MultipartFile file) throws IOException, CertificateException {
+        byte[] certificateData = file.getBytes();
+        CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
+        InputStream inputStream = new ByteArrayInputStream(certificateData);
+        X509Certificate certificate = (X509Certificate) certificateFactory.generateCertificate(inputStream);
+        return certificate;
+    }
 
+    static public CertificateInfo getCertificateInfoFromX509Certificate(X509Certificate certificate){
+        CertificateInfo certificateInfo = new CertificateInfo();
+
+        X500Principal subjectPrincipal = certificate.getSubjectX500Principal();
+        String subjectDN = subjectPrincipal.getName();
+
+        int cnStartIndex = subjectDN.indexOf("CN=") + 3;
+        int cnEndIndex = subjectDN.indexOf(',', cnStartIndex);
+        if (cnEndIndex == -1) {
+            cnEndIndex = subjectDN.length();
+        }
+        certificateInfo.setCommonName(subjectDN.substring(cnStartIndex, cnEndIndex));
+
+        int ouStartIndex = subjectDN.indexOf("OU=") + 3;
+        int ouEndIndex = subjectDN.indexOf(',', ouStartIndex);
+        if (ouEndIndex == -1) {
+            ouEndIndex = subjectDN.length();
+        }
+        certificateInfo.setOrganizationalUnit(subjectDN.substring(ouStartIndex, ouEndIndex));
+
+        int oStartIndex = subjectDN.indexOf("O=") + 2;
+        int oEndIndex = subjectDN.indexOf(',', oStartIndex);
+        if (oEndIndex == -1) {
+            oEndIndex = subjectDN.length();
+        }
+        certificateInfo.setOrganization(subjectDN.substring(oStartIndex, oEndIndex));
+
+        int lStartIndex = subjectDN.indexOf("L=") + 2;
+        int lEndIndex = subjectDN.indexOf(',', lStartIndex);
+        if (lEndIndex == -1) {
+            lEndIndex = subjectDN.length();
+        }
+        certificateInfo.setLocality(subjectDN.substring(lStartIndex, lEndIndex));
+
+        int stStartIndex = subjectDN.indexOf("ST=") + 3;
+        int stEndIndex = subjectDN.indexOf(',', stStartIndex);
+        if (stEndIndex == -1) {
+            stEndIndex = subjectDN.length();
+        }
+        certificateInfo.setState(subjectDN.substring(stStartIndex, stEndIndex));
+
+        int cStartIndex = subjectDN.indexOf("C=") + 2;
+        int cEndIndex = subjectDN.indexOf(',', cStartIndex);
+        if (cEndIndex == -1) {
+            cEndIndex = subjectDN.length();
+        }
+        certificateInfo.setCountry(subjectDN.substring(cStartIndex, cEndIndex));
+
+        certificateInfo.setStartDate(certificate.getNotBefore());
+        certificateInfo.setEndDate(certificate.getNotAfter());
+        return certificateInfo;
+    }
     public static X509Certificate getSelfSignCertificate(CertificateManager certificateManager){
         Provider bcProvider = new BouncyCastleProvider();
         Security.addProvider(bcProvider);
@@ -85,25 +152,6 @@ public class CertificateUtil {
         X509Certificate clientCertificate = new JcaX509CertificateConverter().getCertificate(certificateBuilder.build(signer));
         certificateManager.setClientCertificate(clientCertificate);
         return certificateManager;
-
-
-
-
-/*        Date startDate = new Date(System.currentTimeMillis());
-        X500Name dnName = new X500Name(subjectDN);
-        BigInteger certSerialNumber = new BigInteger(Long.toString(System.currentTimeMillis())); // <-- Using the current timestamp as the certificate serial number
-        KeyPair keyPair = CertificateUtil.getKeyPair();
-        certificateManager.setKeyPair(keyPair);
-        try {
-            JcaX509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(dnName, certSerialNumber, startDate, endDate, dnName, keyPair.getPublic());
-            // Basic Constraint
-            BasicConstraints basicConstraints = new BasicConstraints(true); // <-- true for CA, false for EndEntity
-            certBuilder.addExtension(new ASN1ObjectIdentifier("2.5.29.19"), true, basicConstraints); // Basic Constraints is usually marked as critical.
-            certificateManager.setCertBuilder(certBuilder);
-            return certificateManager;
-        }catch (IOException e) {
-            throw new RuntimeException(e.getMessage());
-        }*/
     }
 
    static public String isCertificateValid(X509Certificate signerCert) {
@@ -162,45 +210,43 @@ public class CertificateUtil {
                 keyPair.getPublic()
         );
     }
-/*
-    static public void constructCert() throws Exception {
-        Security.addProvider(new BouncyCastleProvider());
-       //((Logger)LoggerFactory.getLogger(CertificateGenerator.class)).setLevel(Level.DEBUG);
-        File file = new File( File.separator+"dm-agent.jks");//Files.createTempFile("dm-agent", ".jks");
 
-        KeyPair keypair = createKeypair();
-        JcaX509v3CertificateBuilder cb = createRootCert(keypair);
-        ContentSigner signer = new JcaContentSignerBuilder("SHA256withRSA").build(keypair.getPrivate());
-        X509CertificateHolder rootCert = cb.build(signer);
-        KeystoreConfig cert = CertificateGenerator.constructCert(rootCert,
-                keypair.getPrivate(),
-                file,
-                ImmutableSet.of("test1", "test2"));
-        assertNotNull(cert);
-    }
-
-    static KeystoreConfig constructCert(X509CertificateHolder rootCert, PrivateKey rootKey, File keystoreFile, Set<String> names) throws Exception {
-        log.debug("Create certificate in {} keystore for names: {}", keystoreFile.getAbsolutePath(), names);
-        KeystoreConfig.Builder cb = KeystoreConfig.builder();
-        // verify: keytool -list -keystore dm-agent.jks
-        KeyStore ks = KeyStore.Builder.newInstance("JKS", null, new KeyStore.PasswordProtection(null)).getKeyStore();
-        Certificate jceRootCert = toJava(rootCert);
-        // we use simple password, because no way to safe store password, and so complexity of password does nothing
-        String keypass = "123456";
-        String kspass = "123456";
-        KeyPair keyPair = createKeypair();
-        X509CertificateHolder serverCert = createServerCert(rootKey, rootCert, keyPair, names);
-        Certificate jceServerCert = toJava(serverCert);
-        ks.setKeyEntry("key", keyPair.getPrivate(), keypass.toCharArray(), new Certificate[]{jceServerCert, jceRootCert});
-        cb.keystorePassword(kspass);
-        cb.keyPassword(keypass);
-        try(FileOutputStream fos = new FileOutputStream(keystoreFile)) {
-            ks.store(fos, kspass.toCharArray());
+    static public ResponseEntity<byte[]> getCertificate(String fileName, X509CertificateManager x509CertificateManager){
+        String headerValues = "attachment;filename="+fileName;
+        if(!x509CertificateManager.isClientCertificateInitialized()){
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Content-Type", "application/json; charset=utf-8");
+            return new ResponseEntity<>("certificate is not created yet. Pls make a certificate first".getBytes(), headers, HttpStatus.NOT_FOUND);
         }
-        cb.keystore(keystoreFile);
-        return cb.build();
+        byte[] bytes =  x509CertificateManager.getCertificateFile().getBytes();
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .header(HttpHeaders.CONTENT_DISPOSITION, headerValues)
+                .contentType(MediaType.APPLICATION_JSON)
+                .contentLength(bytes.length)
+                .body(bytes);
     }
-*/
+    static public String renameFilename(String filename){
+        String[] tokens = filename.split("\\.");
+        if(tokens.length > 1){
+            String extension = tokens[1].replace(tokens[1], "-signed."+tokens[1]);
+            filename = tokens[0]+extension;
+        }
+        return filename;
+    }
+
+    static void writeCertToFileBase64Encoded(Certificate certificate, String fileName) throws Exception {
+        StringWriter sw = new StringWriter();
+        try (JcaPEMWriter jpw = new JcaPEMWriter(sw)) {
+            jpw.writeObject(certificate);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        String pem = sw.toString();
+        Path path = Paths.get(fileName);
+        byte[] strToBytes = pem.getBytes();
+        Files.write(path, strToBytes);
+    }
 
     public static Date convertDate(long days){
         LocalDateTime localDateTime = LocalDateTime.now().plusDays(days);

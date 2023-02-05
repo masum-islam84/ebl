@@ -1,14 +1,5 @@
 package org.dcsa.ctk.ebl.controller;
 
-import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.asn1.x500.X500NameBuilder;
-import org.bouncycastle.asn1.x500.style.BCStyle;
-import org.bouncycastle.cert.X509v3CertificateBuilder;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
-import org.bouncycastle.operator.ContentSigner;
-import org.bouncycastle.operator.OperatorCreationException;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.dcsa.ctk.ebl.config.AppProperty;
 import org.dcsa.ctk.ebl.domain.CertificateInfo;
 import org.dcsa.ctk.ebl.dto.CertificateDto;
@@ -16,28 +7,25 @@ import org.dcsa.ctk.ebl.service.UploadService;
 import org.dcsa.ctk.ebl.service.X509CertificateManager;
 import org.dcsa.ctk.ebl.service.caverify.RevocationVerifier;
 import org.dcsa.ctk.ebl.service.exception.CertificateVerificationException;
+import org.dcsa.ctk.ebl.util.CertificateUtil;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.math.BigInteger;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.List;
+import java.util.Objects;
 
-import static org.dcsa.ctk.ebl.controller.CertificateController.ROOT_URL;
+import static org.dcsa.ctk.ebl.controller.CertificateController.ROOT_EBL_URL;
 
 @RestController
-@RequestMapping(value = ROOT_URL)
+@RequestMapping(value = ROOT_EBL_URL)
 public class CertificateController {
-    public static final String ROOT_URL = "/ebl";
-    private final String MAKE_CERTIFICATE = "/makeCertificate";
+    public static final String ROOT_EBL_URL = "/ebl";
+
+    private final String MAKE_CLIENT_CERTIFICATE = "/makeClientCertificate";
     private final String IS_VALID = "/isValid";
     private final String VERIFY_DISTRIBUTION_LIST = "/verifyDistributionList";
 
@@ -49,6 +37,14 @@ public class CertificateController {
     private final String GET_CERTIFICATE = "/getCertificate";
 
     private final String USE_CERTIFICATE = "/useCertificate";
+
+    private final String SIGN_CERTIFICATE = "/signCertificate";
+
+    private final String SIGN_CERTIFICATE_FILE = "/signCertificateFile";
+
+    private final String REVOKE_SIGNATURE = "/revokeSignature";
+
+    private final String IS_CLIENT_CERTIFICATE_SIGNED = "/isClientCertificateSigned";
 
     private final X509CertificateManager x509CertificateManager;
     private final RevocationVerifier revocationVerifier;
@@ -64,38 +60,15 @@ public class CertificateController {
         appProperty.init();
     }
 
-    @PostMapping(path = MAKE_CERTIFICATE)
+    @PostMapping(path = MAKE_CLIENT_CERTIFICATE)
     public CertificateDto makeCertificate(@RequestBody CertificateInfo certificateInfo) throws Exception {
-        X500NameBuilder builder = new X500NameBuilder(BCStyle.INSTANCE);
-        builder.addRDN(BCStyle.CN, certificateInfo.getCommonName());
-        builder.addRDN(BCStyle.OU, certificateInfo.getOrganizationalUnit());
-        builder.addRDN(BCStyle.O, certificateInfo.getOrganization());
-        builder.addRDN(BCStyle.L, certificateInfo.getLocality());
-        builder.addRDN(BCStyle.ST, certificateInfo.getState());
-        builder.addRDN(BCStyle.C, certificateInfo.getCountry());
-
-        X500Name subject = builder.build();
-        KeyPair keyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-
-        X509v3CertificateBuilder certificateBuilder = new JcaX509v3CertificateBuilder(
-                subject,
-                BigInteger.valueOf(System.currentTimeMillis()),
-                new java.util.Date(certificateInfo.getStartDate().getTime()),
-                new java.util.Date(certificateInfo.getEndDate().getTime()),
-                subject,
-                keyPair.getPublic()
-        );
-        x509CertificateManager.getCertificateManager().setCertificateBuilder(certificateBuilder);
-        ContentSigner signer = new JcaContentSignerBuilder("SHA256WithRSAEncryption").build(keyPair.getPrivate());
-        X509Certificate clientCertificate = new JcaX509CertificateConverter().getCertificate(certificateBuilder.build(signer));
-        x509CertificateManager.getCertificateManager().setClientCertificate(clientCertificate);
-        return new CertificateDto(x509CertificateManager.getCertificateManager().getClientCertificate());
+        return x509CertificateManager.makeClientCertificateUnsigned(certificateInfo);
     }
 
 
     @GetMapping(path = IS_VALID)
     public String isCertificateValid(){
-        return x509CertificateManager.isCertificateValid();
+        return x509CertificateManager.isClientCertificateValid();
     }
 
     @PostMapping(path = ADD_DISTRIBUTION_LIST)
@@ -105,7 +78,7 @@ public class CertificateController {
 
     @DeleteMapping(path = REMOVE_DISTRIBUTION_LIST)
     public String removeDistributionValid(@RequestBody CertificateInfo certificateInfo){
-        if(!x509CertificateManager.isCertificateManagerValid()){
+        if(!x509CertificateManager.isClientCertificateInitialized()){
             return "certificate is not created yet. Pls make a certificate first";
         }
         return x509CertificateManager.removeDistributionList(certificateInfo.getCrlUri());
@@ -113,33 +86,21 @@ public class CertificateController {
 
     @GetMapping(path = VERIFY_DISTRIBUTION_LIST)
     public String isDistributionValid(){
-        if(!x509CertificateManager.isCertificateManagerValid()){
+        if(!x509CertificateManager.isClientCertificateInitialized()){
             return "certificate is not created yet. Pls make a certificate first";
         }
-      return  revocationVerifier.checkRevocationStatus(x509CertificateManager.getCertificateManager().getClientCertificate(), null).getMessage();
+      return  revocationVerifier.checkRevocationStatus(x509CertificateManager.getClientCertificate(), null).getMessage();
     }
     @GetMapping(path = GET_ALL_DISTRIBUTION_LIST)
     public List<String> allDistributionValid() throws CertificateVerificationException {
-        if(!x509CertificateManager.isCertificateManagerValid()){
+        if(!x509CertificateManager.isClientCertificateInitialized()){
             return List.of("certificate is not created yet. Pls make a certificate first");
         }
-        return  revocationVerifier.getCrlDistributionPoints(x509CertificateManager.getCertificateManager().getClientCertificate());
+        return  revocationVerifier.getCrlDistributionPoints(x509CertificateManager.getClientCertificate());
     }
     @GetMapping(path = GET_CERTIFICATE)
     public ResponseEntity<byte[]> getCertificate(@RequestParam(defaultValue = "dcsa_certificate.cert") String fileName){
-        String headerValues = "attachment;filename="+fileName;
-        if(!x509CertificateManager.isCertificateManagerValid()){
-            HttpHeaders headers = new HttpHeaders();
-            headers.add("Content-Type", "application/json; charset=utf-8");
-            return new ResponseEntity<>("certificate is not created yet. Pls make a certificate first".getBytes(), headers, HttpStatus.NOT_FOUND);
-        }
-        byte[] bytes =  x509CertificateManager.getCertificateFile().getBytes();
-        return ResponseEntity
-                .ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, headerValues)
-                .contentType(MediaType.APPLICATION_JSON)
-                .contentLength(bytes.length)
-                .body(bytes);
+        return CertificateUtil.getCertificate(fileName, x509CertificateManager);
     }
     @PostMapping(path = USE_CERTIFICATE)
     public String useCertificate(@RequestParam("file") MultipartFile file){
@@ -147,12 +108,32 @@ public class CertificateController {
         return "uploaded "+file.getOriginalFilename();
     }
 
-
-
-
-
-
-
-
-
+    @GetMapping(path = SIGN_CERTIFICATE)
+    public ResponseEntity<byte[]> singCertificate(@RequestParam(defaultValue = "dcsa_certificate.cert") String fileName) throws Exception {
+        if(!x509CertificateManager.isClientCertificateInitialized()){
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Content-Type", "application/json; charset=utf-8");
+            return new ResponseEntity<>("certificate is not created yet. Pls make a certificate first".getBytes(), headers, HttpStatus.NOT_FOUND);
+        }
+        x509CertificateManager.setClientCertificate(x509CertificateManager.signCertificate(x509CertificateManager.getClientCertificate()));
+        fileName = CertificateUtil.renameFilename(Objects.requireNonNull(fileName));
+        return CertificateUtil.getCertificate(fileName, x509CertificateManager);
+    }
+    @PostMapping(path = SIGN_CERTIFICATE_FILE)
+    public ResponseEntity<byte[]> signCertificateFile(@RequestParam("file") MultipartFile file) throws Exception {
+        X509Certificate  certificate = CertificateUtil.makeCertificateFromMultipartFile(file);
+        x509CertificateManager.setClientCertificate(x509CertificateManager.signCertificate(certificate));
+        String fileName = CertificateUtil.renameFilename(Objects.requireNonNull(file.getOriginalFilename()));
+        return CertificateUtil.getCertificate(fileName, x509CertificateManager);
+    }
+    @GetMapping(path = IS_CLIENT_CERTIFICATE_SIGNED)
+    public String isClientCertificateSinged(){
+        return x509CertificateManager.isClientCertificateSinged();
+    }
+    @PutMapping(path = REVOKE_SIGNATURE)
+    public CertificateDto revokeSignature(@RequestParam("file") MultipartFile file) throws Exception {
+        X509Certificate  certificate = CertificateUtil.makeCertificateFromMultipartFile(file);
+        X509Certificate x509Certificate =  x509CertificateManager.removeSignature(certificate);
+        return new CertificateDto(x509Certificate);
+    }
 }
