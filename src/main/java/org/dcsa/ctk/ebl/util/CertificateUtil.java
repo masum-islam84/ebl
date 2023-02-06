@@ -211,14 +211,14 @@ public class CertificateUtil {
         );
     }
 
-    static public ResponseEntity<byte[]> getCertificate(String fileName, X509CertificateManager x509CertificateManager){
+    static public ResponseEntity<byte[]> getCertificateFile(String fileName, X509CertificateManager x509CertificateManager){
         String headerValues = "attachment;filename="+fileName;
         if(!x509CertificateManager.isClientCertificateInitialized()){
             HttpHeaders headers = new HttpHeaders();
             headers.add("Content-Type", "application/json; charset=utf-8");
             return new ResponseEntity<>("certificate is not created yet. Pls make a certificate first".getBytes(), headers, HttpStatus.NOT_FOUND);
         }
-        byte[] bytes =  x509CertificateManager.getCertificateFile().getBytes();
+        byte[] bytes =  x509CertificateManager.getCertificateStr().getBytes();
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .header(HttpHeaders.CONTENT_DISPOSITION, headerValues)

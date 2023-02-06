@@ -2,6 +2,7 @@ package org.dcsa.ctk.ebl.controller;
 
 import org.dcsa.ctk.ebl.config.AppProperty;
 import org.dcsa.ctk.ebl.domain.CertificateInfo;
+import org.dcsa.ctk.ebl.domain.enums.CertificateTrust;
 import org.dcsa.ctk.ebl.dto.CertificateDto;
 import org.dcsa.ctk.ebl.service.UploadService;
 import org.dcsa.ctk.ebl.service.X509CertificateManager;
@@ -25,7 +26,7 @@ import static org.dcsa.ctk.ebl.controller.CertificateController.ROOT_EBL_URL;
 public class CertificateController {
     public static final String ROOT_EBL_URL = "/ebl";
 
-    private final String MAKE_CLIENT_CERTIFICATE = "/makeClientCertificate";
+    private final String MAKE_CLIENT_CERTIFICATE = "/{sign}/makeClientCertificate";
     private final String IS_VALID = "/isValid";
     private final String VERIFY_DISTRIBUTION_LIST = "/verifyDistributionList";
 
@@ -46,6 +47,8 @@ public class CertificateController {
 
     private final String IS_CLIENT_CERTIFICATE_SIGNED = "/isClientCertificateSigned";
 
+    private final String GET_CERTIFICATE_FILE = "/getCertificateFile";
+
     private final X509CertificateManager x509CertificateManager;
     private final RevocationVerifier revocationVerifier;
     private final AppProperty appProperty;
@@ -61,8 +64,21 @@ public class CertificateController {
     }
 
     @PostMapping(path = MAKE_CLIENT_CERTIFICATE)
-    public CertificateDto makeCertificate(@RequestBody CertificateInfo certificateInfo) throws Exception {
-        return x509CertificateManager.makeClientCertificateUnsigned(certificateInfo);
+    public ResponseEntity<byte[]>  makeCertificate(@PathVariable String sign,  @RequestBody CertificateInfo certificateInfo) throws Exception {
+        CertificateTrust certificateTrust;
+        if(sign.equalsIgnoreCase(CertificateTrust.SIGNED.name())){
+            certificateTrust = CertificateTrust.SIGNED;
+        }else if(sign.equalsIgnoreCase(CertificateTrust.UNSIGNED.name())){
+            certificateTrust = CertificateTrust.UNSIGNED;
+        }else{
+            certificateTrust = CertificateTrust.UNKNOWN;
+        }
+        return x509CertificateManager.makeClientCertificate(certificateInfo, certificateTrust);
+    }
+
+    @GetMapping(path = GET_CERTIFICATE_FILE)
+    public ResponseEntity<byte[]> getCertificateFile(@RequestParam(defaultValue = "dcsa_certificate.cert") String fileName){
+        return x509CertificateManager.getCertificateFile(fileName);
     }
 
 
@@ -100,7 +116,7 @@ public class CertificateController {
     }
     @GetMapping(path = GET_CERTIFICATE)
     public ResponseEntity<byte[]> getCertificate(@RequestParam(defaultValue = "dcsa_certificate.cert") String fileName){
-        return CertificateUtil.getCertificate(fileName, x509CertificateManager);
+        return CertificateUtil.getCertificateFile(fileName, x509CertificateManager);
     }
     @PostMapping(path = USE_CERTIFICATE)
     public String useCertificate(@RequestParam("file") MultipartFile file){
@@ -117,19 +133,20 @@ public class CertificateController {
         }
         x509CertificateManager.setClientCertificate(x509CertificateManager.signCertificate(x509CertificateManager.getClientCertificate()));
         fileName = CertificateUtil.renameFilename(Objects.requireNonNull(fileName));
-        return CertificateUtil.getCertificate(fileName, x509CertificateManager);
+        return CertificateUtil.getCertificateFile(fileName, x509CertificateManager);
     }
     @PostMapping(path = SIGN_CERTIFICATE_FILE)
     public ResponseEntity<byte[]> signCertificateFile(@RequestParam("file") MultipartFile file) throws Exception {
         X509Certificate  certificate = CertificateUtil.makeCertificateFromMultipartFile(file);
         x509CertificateManager.setClientCertificate(x509CertificateManager.signCertificate(certificate));
         String fileName = CertificateUtil.renameFilename(Objects.requireNonNull(file.getOriginalFilename()));
-        return CertificateUtil.getCertificate(fileName, x509CertificateManager);
+        return CertificateUtil.getCertificateFile(fileName, x509CertificateManager);
     }
     @GetMapping(path = IS_CLIENT_CERTIFICATE_SIGNED)
     public String isClientCertificateSinged(){
         return x509CertificateManager.isClientCertificateSinged();
     }
+
     @PutMapping(path = REVOKE_SIGNATURE)
     public CertificateDto revokeSignature(@RequestParam("file") MultipartFile file) throws Exception {
         X509Certificate  certificate = CertificateUtil.makeCertificateFromMultipartFile(file);
