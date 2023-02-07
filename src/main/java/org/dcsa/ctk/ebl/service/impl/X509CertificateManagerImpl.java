@@ -38,7 +38,7 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
     static public final String ROOT_CERTIFICATE_PASSWORD = "password";
     static public final String ROOT_CERTIFICATE_ALIAS= "root";
     private final String ROOT_CERTIFICATE_ISSUER = "CN=Root CA, O=My Organization, L=My City, ST=My State, C=My Country, emailAddress=rootca@test.com";
-    private KeyStore keyStore;
+    KeyPair rootCertificateKeyPair;
 
     private X509Certificate rootCertificate;
 
@@ -47,6 +47,14 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
     private String clientCommonName;
 
     private String certificateName;
+
+    private PublicKey publicKey;
+    public PublicKey getPublicKey() {
+        return publicKey;
+    }
+    public void setPublicKey(PublicKey publicKey) {
+        this.publicKey = publicKey;
+    }
 
     public void setClientCommonName(String commonName){
         this.clientCommonName = commonName;
@@ -58,7 +66,7 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
     }
 
     public boolean isRootCertificateInitialized(){
-        if(keyStore == null && rootCertificate == null){
+        if( rootCertificateKeyPair == null && rootCertificate == null){
             return false;
         }else {
             return true;
@@ -87,20 +95,17 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
     private void madeRootCertificateKeyStore() throws NoSuchAlgorithmException, OperatorCreationException, KeyStoreException, CertificateException, IOException {
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
         keyGen.initialize(2048);
-        KeyPair keyPair = keyGen.generateKeyPair();
+        rootCertificateKeyPair = keyGen.generateKeyPair();
 
         X500Name x500Name = new X500Name(ROOT_CERTIFICATE_ISSUER);
         Date notBefore = new Date();
         Date notAfter = new Date(notBefore.getTime() + TimeUnit.DAYS.toMillis(365));
         BigInteger serialNumber = BigInteger.valueOf(new SecureRandom().nextLong());
 
-        X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(x500Name, serialNumber, notBefore, notAfter, x500Name, keyPair.getPublic());
-        ContentSigner signer = new JcaContentSignerBuilder("SHA256withRSA").build(keyPair.getPrivate());
-        X509CertificateHolder certHolder = certBuilder.build(signer);
 
-        keyStore = KeyStore.getInstance("JKS");
-        keyStore.load(null, null);
-        keyStore.setKeyEntry(ROOT_CERTIFICATE_ALIAS, keyPair.getPrivate(), ROOT_CERTIFICATE_PASSWORD.toCharArray(), new X509Certificate[]{new JcaX509CertificateConverter().getCertificate(certHolder)});
+        X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(x500Name, serialNumber, notBefore, notAfter, x500Name, rootCertificateKeyPair.getPublic());
+        ContentSigner signer = new JcaContentSignerBuilder("SHA256withRSA").build(rootCertificateKeyPair.getPrivate());
+        X509CertificateHolder certHolder = certBuilder.build(signer);
 
         rootCertificate = new JcaX509CertificateConverter().getCertificate(certHolder);
     }
@@ -124,16 +129,17 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
                 new java.util.Date(certificateInfo.getStartDate().getTime()),
                 new java.util.Date(certificateInfo.getEndDate().getTime()),
                 subject,
-                keyPair.getPublic()
+                publicKey
         );
+
         ContentSigner signer = new JcaContentSignerBuilder("SHA256WithRSAEncryption").build(keyPair.getPrivate());
         clientCertificate = new JcaX509CertificateConverter().getCertificate(certificateBuilder.build(signer));
 
         if(certificateTrust == CertificateTrust.SIGNED){
             clientCertificate = signCertificate(clientCertificate);
-            certificateName = "signed-client-certificate.cert";
+            certificateName = "signed-client-certificate.jks";
         }else{
-            certificateName = "unsigned-client-certificate.cert";
+            certificateName = "unsigned-client-certificate.jks";
         }
         return CertificateUtil.getCertificateFile(certificateName, this);
     }
@@ -143,8 +149,7 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
     }
 
     public X509Certificate signCertificate(X509Certificate certificate) throws Exception {
-        String alias = keyStore.aliases().nextElement();
-        PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, ROOT_CERTIFICATE_PASSWORD.toCharArray());
+        PrivateKey privateKey = rootCertificateKeyPair.getPrivate();
         X500Name issuer = new JcaX509CertificateHolder(rootCertificate).getSubject();
         BigInteger serial = BigInteger.valueOf(System.currentTimeMillis());
         X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(issuer, serial, certificate.getNotBefore(), certificate.getNotAfter(), issuer, certificate.getPublicKey());
@@ -270,7 +275,7 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
         return CertificateUtil.isCertificateValid(clientCertificate);
     }
     public String getCertificateStr(){
-        if(!isClientCertificateInitialized() || isClientCertificateInitialized()){
+        if(!isClientCertificateInitialized()){
             return "certificate is not created yet. Pls make a certificate first";
         }
         StringWriter sw = new StringWriter();

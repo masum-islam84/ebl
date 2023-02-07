@@ -29,13 +29,17 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.*;
 import java.security.cert.Certificate;
 import java.security.cert.*;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
 @Log
@@ -246,6 +250,23 @@ public class CertificateUtil {
         Path path = Paths.get(fileName);
         byte[] strToBytes = pem.getBytes();
         Files.write(path, strToBytes);
+    }
+
+    public static PublicKey getPublicKey(CertificateInfo certificateInfo){
+        String publicKeyStr = certificateInfo.getPublicKey()
+                .replace("-----BEGIN PUBLIC KEY-----", "")
+                .replace("-----END PUBLIC KEY-----", "");
+        // Decode the base64 encoded data to a byte array
+        byte[] pemData = Base64.getMimeDecoder().decode(publicKeyStr.getBytes(StandardCharsets.UTF_8));
+        // Convert the byte array to a PublicKey object
+        X509EncodedKeySpec spec = new X509EncodedKeySpec(pemData);
+        try {
+            KeyFactory kf = KeyFactory.getInstance("RSA");
+            PublicKey publicKey = kf.generatePublic(spec);
+            return publicKey;
+        }catch (Exception e){
+            throw new RuntimeException(e);
+        }
     }
 
     public static Date convertDate(long days){

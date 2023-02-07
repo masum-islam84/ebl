@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.security.PublicKey;
 import java.security.cert.X509Certificate;
 import java.util.List;
 import java.util.Objects;
@@ -66,6 +67,8 @@ public class CertificateController {
     @PostMapping(path = MAKE_CLIENT_CERTIFICATE)
     public ResponseEntity<byte[]>  makeCertificate(@PathVariable String sign,  @RequestBody CertificateInfo certificateInfo) throws Exception {
         CertificateTrust certificateTrust;
+        PublicKey publicKey = CertificateUtil.getPublicKey(certificateInfo);
+        x509CertificateManager.setPublicKey(publicKey);
         if(sign.equalsIgnoreCase(CertificateTrust.SIGNED.name())){
             certificateTrust = CertificateTrust.SIGNED;
         }else if(sign.equalsIgnoreCase(CertificateTrust.UNSIGNED.name())){
