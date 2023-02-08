@@ -68,7 +68,6 @@ public class CertificateController {
     public ResponseEntity<byte[]>  makeCertificate(@PathVariable String sign,  @RequestBody CertificateInfo certificateInfo) throws Exception {
         CertificateTrust certificateTrust;
         PublicKey publicKey = CertificateUtil.getPublicKey(certificateInfo);
-        x509CertificateManager.setPublicKey(publicKey);
         if(sign.equalsIgnoreCase(CertificateTrust.SIGNED.name())){
             certificateTrust = CertificateTrust.SIGNED;
         }else if(sign.equalsIgnoreCase(CertificateTrust.UNSIGNED.name())){
@@ -76,7 +75,7 @@ public class CertificateController {
         }else{
             certificateTrust = CertificateTrust.UNKNOWN;
         }
-        return x509CertificateManager.makeClientCertificate(certificateInfo, certificateTrust);
+        return x509CertificateManager.makeClientCertificate(certificateInfo, publicKey, certificateTrust);
     }
 
     @GetMapping(path = GET_CERTIFICATE_FILE)

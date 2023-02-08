@@ -12,7 +12,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 
 public interface X509CertificateManager {
-    ResponseEntity<byte[]> makeClientCertificate(CertificateInfo certificateInfo, CertificateTrust certificateTrust) throws Exception;
+    ResponseEntity<byte[]> makeClientCertificate(CertificateInfo certificateInfo, PublicKey publicKey, CertificateTrust certificateTrust) throws Exception;
 
     ResponseEntity<byte[]> getCertificateFile(String filename);
 
@@ -39,8 +39,5 @@ public interface X509CertificateManager {
     void setClientCommonName(String commonName);
 
     X509Certificate removeSignature(X509Certificate signedCertificate) throws NoSuchAlgorithmException, OperatorCreationException, CertificateException;
-
     String getCertificateStr();
-    PublicKey getPublicKey();
-    void setPublicKey(PublicKey publicKey);
 }

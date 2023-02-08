@@ -48,14 +48,6 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
 
     private String certificateName;
 
-    private PublicKey publicKey;
-    public PublicKey getPublicKey() {
-        return publicKey;
-    }
-    public void setPublicKey(PublicKey publicKey) {
-        this.publicKey = publicKey;
-    }
-
     public void setClientCommonName(String commonName){
         this.clientCommonName = commonName;
     }
@@ -110,7 +102,7 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
         rootCertificate = new JcaX509CertificateConverter().getCertificate(certHolder);
     }
 
-    public ResponseEntity<byte[]> makeClientCertificate(CertificateInfo certificateInfo, CertificateTrust certificateTrust) throws Exception {
+    public ResponseEntity<byte[]> makeClientCertificate(CertificateInfo certificateInfo, PublicKey publicKey, CertificateTrust certificateTrust) throws Exception {
         X500NameBuilder builder = new X500NameBuilder(BCStyle.INSTANCE);
         builder.addRDN(BCStyle.CN, certificateInfo.getCommonName());
         builder.addRDN(BCStyle.OU, certificateInfo.getOrganizationalUnit());
@@ -144,7 +136,12 @@ public class X509CertificateManagerImpl implements X509CertificateManager {
         return CertificateUtil.getCertificateFile(certificateName, this);
     }
     public ResponseEntity<byte[]> getCertificateFile(String filename){
-        certificateName = filename;
+        if(filename.contains(".")){
+          String[] tokens =  filename.split("\\.");
+            certificateName = tokens[0]+".jsk";
+        }else{
+            certificateName = filename;
+        }
         return CertificateUtil.getCertificateFile(certificateName, this);
     }
 
